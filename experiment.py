@@ -6,7 +6,7 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
-    from pb.gtfs_realtime_pb2 import FeedMessage, VehiclePosition, TripUpdate
+    from scrutinize.pb.gtfs_realtime_pb2 import FeedMessage, VehiclePosition, TripUpdate
     import requests
 
     try:
@@ -31,17 +31,21 @@ def _(tu_feed, vp_feed):
     # there is an extension to read protobuf directly. Maybe I will try that if the performance is bad enough with dicts
     from google.protobuf import json_format
     import polars as pl
+    import duckdb
+
     vp_dict = json_format.MessageToDict(vp_feed)
     tu_dict = json_format.MessageToDict(tu_feed)
 
 
-    from scrutinize.gtfs_rt_detail import GTFSRTDetail
-    return
+    duckdb.query("CREATE OR REPLACE TABLE vehicle_positions AS (SELECT * FROM (SELECT unnest($data.entity, recursive := true)))", params={"data": vp_dict})
+    duckdb.query("CREATE OR REPLACE TABLE trip_updates AS (SELECT * FROM (SELECT unnest($data.entity, recursive := true)))", params={"data": tu_dict})
+
+    return (duckdb,)
 
 
 @app.cell
-def _():
-    ""
+def _(duckdb):
+    duckdb.query("SELECT * FROM trip_updates WHERE timestamp = 0")
     return
 
 
