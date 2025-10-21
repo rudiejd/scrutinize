@@ -53,7 +53,8 @@ def _(duckdb, requests):
     with ZipFile(BytesIO(static.content)) as thezip:
         thezip.extractall("build/")
 
-    duckdb.query("CREATE TABLE trips AS SELECT * FROM read_csv('build/trips.txt', sample_size=-1)")
+    duckdb.query("CREATE OR REPLACE TABLE trips AS SELECT * FROM read_csv('build/trips.txt', sample_size=-1)")
+    duckdb.query("CREATE OR REPLACE TABLE routes AS SELECT * FROM read_csv('build/routes.txt', sample_size=-1)")
     return
 
 
@@ -142,7 +143,7 @@ def _(mo, tu_dict):
     _df = mo.sql(
         f"""
         -- header.timestamp
-        SELECT "header.timestamp"
+        SELECT 'header.timestamp'
         WHERE DATE(TO_TIMESTAMP({tu_dict['header']['timestamp']}::DOUBLE)) != CURRENT_DATE()
         """
     )
@@ -232,22 +233,30 @@ def _(mo, trip_updates, trips):
 
 
 @app.cell
-def _(mo):
+def _(mo, routes, trip_updates, vehicle_positions):
     _df = mo.sql(
         f"""
         -- E004 - GTFS-rt route_id does not exist in GTFS data
-        SELECT * FROM
+        SELECT id_1 vehicleId, tripId, routeId
+        FROM trip_updates tu
+        LEFT JOIN routes r ON tu.routeId = r.route_id
+        WHERE r.route_id IS NULL
+        UNION ALL
+        SELECT id AS vehicleId, tripId, routeId
+        FROM vehicle_positions vp
+        LEFT JOIN routes r ON vp.routeId = r.route_id
+        WHERE r.route_id IS NULL;
         """
     )
     return
 
 
 @app.cell
-def _(mo):
+def _(mo, vehicle_positions):
     _df = mo.sql(
         f"""
         -- E006 - Missing required trip field for frequency-based exact_times = 0
-        SELECT * FROM
+        SELECT DISTINCT * from vehicle_positions
         """
     )
     return
